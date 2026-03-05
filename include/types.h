@@ -44,7 +44,10 @@ typedef unsigned long		physical_size_t;
 typedef uint64_t    pte_t;
 typedef uint64_t *pagetable_t;
 typedef int32_t   pid_t;
-typedef unsigned char bool;
+/*
+ * c23 has added `bool` as keyword
+ * typedef unsigned char bool;
+ */
 typedef uint16_t  wchar;
 
 typedef uint32_t mode_t;

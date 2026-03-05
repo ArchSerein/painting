@@ -95,10 +95,11 @@ struct proc {
   uint64_t            vruntime;
   pagetable_t         pagetable;
   struct context      context;
-  struct sleeplock *  chan;
+  void *              chan;         // sleep channel
   struct file *       cwd;
   uint64_t            heap_start;
   uint64_t            heap_end;
+  int                 exit_state;   // exit status for wait()
 
   // debug
   char                name[MAXLEN];

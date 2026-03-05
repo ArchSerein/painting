@@ -1,7 +1,7 @@
 #include <lib.h>
 #include <stdio.h>
 
-const char *argv[] = { "sh", 0 };
+const char *argv[] = {"sh", NULL};
 
 int main(int argc, char *argv[]) {
   printf("%s: starting sh\n", argv[0]);

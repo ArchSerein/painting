@@ -267,8 +267,113 @@ bad:
 }
 
 void process_exit(uint64_t state) {
-  printf("exit state: %d\n", state);
-  panic("process_exit not implemented");
+  struct proc *p = cur_proc();
+
+  // Close all open files
+  struct list_elem *e;
+  while (!list_empty(&p->file_list)) {
+    e = list_pop_front(&p->file_list);
+    struct file *f = list_entry(e, struct file, elem);
+    file_close(f->dirent);
+    kfree(f, FILE_MODE);
+  }
+
+  // Close current working directory
+  if (p->cwd) {
+    file_close(p->cwd->dirent);
+    kfree(p->cwd, FILE_MODE);
+    p->cwd = NULL;
+  }
+
+  // Free user memory (page table)
+  if (p->pagetable) {
+    uvmunmap(p->pagetable, TRAMPOLINE, 1, 0);
+    uvmunmap(p->pagetable, TRAPFRAME, 1, 0);
+    uvmfree(p->pagetable, 0);
+    p->pagetable = NULL;
+  }
+
+  // Acquire process lock for state change
+  acquire(&p->lock);
+
+  // Set exit state and change status to ZIMBIE (zombie)
+  p->exit_state = state;
+  p->status = ZIMBIE;
+
+  // Wake up parent if it's waiting
+  if (p->parent) {
+    wakeup(p->parent);
+  }
+
+  // Jump into the scheduler, never to return
+  sched();
+  panic("zombie exit");
+}
+
+// Wait for a child process to exit and return its PID.
+// If pid == 0, wait for any child.
+// If pid != 0, wait for that specific child.
+// Returns -1 if no matching child exists.
+pid_t process_wait(pid_t pid) {
+  struct proc *p = cur_proc();
+  struct list_elem *e;
+  struct proc *child;
+  int have_kids;
+
+  acquire(&process_lock);
+  for (;;) {
+    have_kids = 0;
+    for (e = list_begin(&process_list); e != list_end(&process_list);
+         e = list_next(e)) {
+      child = list_entry(e, struct proc, elem);
+      if (child->parent == p) {
+        // If pid != 0, only wait for that specific child
+        if (pid != 0 && child->pid != pid) {
+          continue;
+        }
+        acquire(&child->lock);
+        if (child->status == ZIMBIE) {
+          // Found a zombie child, clean it up
+          pid_t child_pid = child->pid;
+          // Free child's kernel stack
+          if (child->kstack) {
+            uvmunmap(kernel_pagetable, child->kstack, 1, 1);
+            child->kstack = 0;
+          }
+          // Free child's trapframe
+          if (child->trapframe) {
+            kpmfree(child->trapframe);
+            child->trapframe = NULL;
+          }
+          // Remove child from process list
+          list_remove(&child->elem);
+          // Free child's pid
+          pid_free(child->pid);
+          release(&child->lock);
+          // Free child's proc structure
+          kfree(child, PROC_MODE);
+          release(&process_lock);
+          return child_pid;
+        }
+        release(&child->lock);
+        have_kids = 1;
+      }
+    }
+
+    if (!have_kids) {
+      release(&process_lock);
+      return -1;
+    }
+
+    // If waiting for specific pid that exists but isn't zombie yet
+    if (pid != 0 && !have_kids) {
+      release(&process_lock);
+      return -1;
+    }
+
+    // Wait for child to exit
+    sleep(p, &process_lock);
+  }
 }
 
 pid_t fork(void) {

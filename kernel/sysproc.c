@@ -104,5 +104,7 @@ uint64_t sys_fork(void) {
 }
 
 uint64_t sys_wait(void) {
-  return -1;
+  uint64_t pid;
+  argint(&pid, 0);
+  return process_wait((pid_t)pid);
 }

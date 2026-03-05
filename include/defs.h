@@ -15,6 +15,7 @@ void            wakeup(void *);
 bool            loader(const char *);
 void            sched(void);
 void            process_exit(uint64_t) __noreturn;
+pid_t           process_wait(pid_t);
 
 // kalloc.c
 void            slab_init(void);

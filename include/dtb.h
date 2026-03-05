@@ -21,7 +21,7 @@ struct MemInfo {
 };
 
 void parseDtb();
-void dtbEntryinit();
+void dtbEntryinit(uint64_t);
 
 #define FDT_BEGIN_NODE 0x00000001
 #define FDT_END_NODE 0x00000002
