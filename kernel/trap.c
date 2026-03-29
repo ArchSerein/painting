@@ -34,7 +34,18 @@ void trapinithart(void) {
 int dev_intr(void) {
   uint64_t scause = r_scause();
 
-  if (scause == 0x8000000000000009L) {
+  if (scause == 0x8000000000000001L) {
+    // Supervisor software interrupt (often used as timer interrupt signal
+    // after SBI timer event delivery on some platforms).
+    w_sip(r_sip() & ~SIP_SSIP);
+    clock_intr();
+    if (r_tp() == 0) {
+      acquire(&tickslock);
+      ++ticks;
+      release(&tickslock);
+    }
+    return 2;
+  } else if (scause == 0x8000000000000009L) {
     int irq = plic_claim();
     if (irq == VIRTIO0_IRQ)
       virtio_disk_intr();

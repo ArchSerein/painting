@@ -93,7 +93,9 @@ uint64_t sys_exec(void) {
   bool ok = process_execute(path, argv);
   kfree(argbuf, DEFAULT);
   if (ok)
-    return 0;
+    // process_execute() has already prepared the new program's a0/a1/sp.
+    // Return the prepared a0 (argc) so syscall() won't clobber it.
+    return cur_proc()->trapframe->a0;
   return -1;
 }
 

@@ -7,6 +7,14 @@
 static char *mem_heap_start;
 static char *mem_heap_end;
 
+int mm_init(void);
+
+static int ensure_mm_init(void) {
+  if (mem_heap_start != 0)
+    return 0;
+  return mm_init();
+}
+
 /* 
  * mem_sbrk - simple model of the sbrk function. Extends the heap 
  *    by incr bytes and returns the start address of the new area. In
@@ -132,6 +140,10 @@ void *malloc(uint32_t size) {
   uint32_t asize;
   uint32_t extendsize;
   char *bp;
+
+  if (ensure_mm_init() < 0)
+      return NULL;
+
   if(size == 0) {
       return NULL;
   }

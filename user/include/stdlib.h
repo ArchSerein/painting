@@ -40,5 +40,6 @@
 void* malloc(uint32_t);
 void free(void*);
 void* realloc(void *, uint32_t);
+int mm_init(void);
 
 #endif // !STDLIB_H__

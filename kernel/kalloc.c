@@ -7,6 +7,7 @@
 #include <macro.h>
 #include <string.h>
 #include <defs.h>
+#include <stdio.h>
 #include <vfs.h>
 #include <schedule.h>
 
@@ -142,8 +143,15 @@ void *kalloc(size_t size, mode_t mode) {
       }
       return bp;
     default:
-      size_t sz = next_pow_of_2(size);
+      if (size == 0)
+        return NULL;
+      size_t need = size + ALIGN;
+      if (need < size)
+        return NULL;
+      size_t sz = next_pow_of_2(need);
       ptr = buddy_alloc(sz);
+      if (ptr == NULL)
+        return NULL;
       return FTRP(ptr);
   }
 }
@@ -172,8 +180,11 @@ void kfree(void *addr, mode_t mode) {
       goto do_free;
     default:
       uint8_t level = GET(HDRP(addr), uint8_t);
-      size = 1 << level;
-      memset(addr, 0xc, size);
+      if (level > MAX_LEVEL)
+        panic("kfree: invalid buddy level");
+      size = 1UL << level;
+      if (size > ALIGN)
+        memset(addr, 0xc, size - ALIGN);
       buddy_free(HDRP(addr));
       return;
   }

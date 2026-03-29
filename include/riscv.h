@@ -57,11 +57,23 @@ static inline uint64_t r_stval() {
   asm volatile("csrr %0, stval" : "=r"(x));
   return x;
 }
+
+static inline uint64_t r_sip() {
+  uint64_t x;
+  asm volatile("csrr %0, sip" : "=r"(x));
+  return x;
+}
+
+static inline void w_sip(uint64_t x) {
+  asm volatile("csrw sip, %0" : : "r"(x));
+}
+
 // Supervisor Interrupt Enable
 #define SIE_SEIE (1L << 9) // external
 #define SIE_STIE (1L << 5) // timer
 #define SIE_SSIE (1L << 1) // software
 #define SIE_SPIE (1L << 4)
+#define SIP_SSIP (1L << 1)
 
 static inline uint64_t r_sstatus() {
   uint64_t x;

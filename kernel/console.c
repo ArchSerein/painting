@@ -65,8 +65,11 @@ void console_putc(int ch) {
 }
 
 int console_read(int user_dst, uint64_t dst, int n) {
-  int i;
-  for (i = 0; i < n; i++) {
+  int i = 0;
+  if (n <= 0)
+    return 0;
+
+  while (i < n - 1) {
     int c;
     while ((uart_read_reg(UART_LSR) & UART_LSR_RX_READY) == 0) {
       yield();
@@ -76,25 +79,41 @@ int console_read(int user_dst, uint64_t dst, int n) {
       if (i == 0) return 0;
       break;
     }
+    // DEL(0x7f) and BS(0x08): erase one character in current line buffer.
+    if (c == 0x7f || c == 0x08) {
+      if (i > 0) {
+        i--;
+        console_putc(BACKSPACE);
+      }
+      continue;
+    }
+
     char ch = (char)c;
+    if (ch == '\n' || ch == '\r') {
+       if (user_dst) {
+         if (copyout(cur_proc()->pagetable, dst + i, &ch, 1) < 0)
+           break;
+       } else {
+         ((char *)dst)[i] = ch;
+       }
+        if (ch == '\r') {
+          // Echo \n for \r
+          console_putc('\n');
+        } else {
+          console_putc(ch);
+        }
+        i++;
+        break;
+     }
     if (user_dst) {
       if (copyout(cur_proc()->pagetable, dst + i, &ch, 1) < 0)
         break;
     } else {
       ((char *)dst)[i] = ch;
     }
-    if (ch == '\n' || ch == '\r') {
-       if (ch == '\r') {
-         // Echo \n for \r
-         console_putc('\n');
-       } else {
-         console_putc(ch);
-       }
-       i++;
-       break;
-    }
     // Echo the character
     console_putc(ch);
+    i++;
   }
   return i;
 }

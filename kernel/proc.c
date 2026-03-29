@@ -444,7 +444,7 @@ pid_t fork(void) {
   }
 
   // copy on write
-  if (uvmcopy(p->pagetable, np->pagetable, p->heap_start) < 0) {
+  if (uvmcopy(p->pagetable, np->pagetable, p->heap_end) < 0) {
     goto bad;
   }
   // user stack is fixed at a high virtual address and not covered by [0, heap_start)
@@ -580,8 +580,10 @@ void wakeup(void *chan) {
   struct list_elem *e;
   for (e = list_begin(&process_list); e != list_end(&process_list); e = list_next(e)) {
     struct proc *p = list_entry(e, struct proc, elem);
+    if (p == cur)
+      continue;
     acquire(&p->lock);
-    if (p != cur && p->status == SLEEPING && p->chan == chan) {
+    if (p->status == SLEEPING && p->chan == chan) {
       p->status = RUNNABLE;
       rb_push_back(p);
     }
