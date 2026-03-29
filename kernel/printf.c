@@ -174,4 +174,3 @@ void _log(const char *file, int line, const char *func, const char *format, ...)
   va_end(args);
   release(&pr);
 }
-

@@ -3,6 +3,8 @@
 
 typedef uint32_t  mode_t;
 
+enum file_type { FD_NONE, FD_FILE, FD_DEVICE };
+
 struct file {
   uint32_t          fd;
   struct dirent *   dirent;
@@ -10,6 +12,7 @@ struct file {
   bool              deny_write;
   mode_t            flag;
   struct list_elem  elem;
+  enum file_type    type;
 };
 
 bool      filesys_create(struct proc *, char *, mode_t);

@@ -17,7 +17,9 @@ pagetable_t   kernel_pagetable;
 
 void kvmmap(pagetable_t pgtble, uint64_t va, uint64_t pa, uint64_t sz, int mode) {
   if (mappages(pgtble, va, pa, sz, mode) < 0) {
+    #ifdef CONFIG_DEBUG
     log("kvminit fault and will shutdown\n");
+    #endif
     sbi_shutdown();
   }
 }

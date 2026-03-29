@@ -26,17 +26,13 @@
 #define GET(bp,type)      (*(type *)(bp));
 #define HDRP(bp)          ((void *)((uint8_t *)(bp)-ALIGN))
 #define FTRP(bp)          ((void *)((uint8_t *)(bp)+ALIGN))
-#define find_lowest_zero_bit(num, width) ({ \
-    int pos = 0; \
-    while ((num) & (1 << pos)) { \
-        pos++; \
-        if (pos > width) {  \
-          pos = -1;         \
-          break;            \
-        }                   \
-    } \
-    pos; \
-})
+static int find_lowest_zero_bit(uint64_t num, int width) {
+  for (int pos = 0; pos < width; pos++) {
+    if ((num & (1ULL << pos)) == 0)
+      return pos;
+  }
+  return -1;
+}
 struct blockret {
   void      *list;
   uint32_t  off;
@@ -57,7 +53,7 @@ static void init_bitmap_helper(char *ptr, uint32_t block_num) {
   PUT(ptr+i, val, char);
   // 其余的 bit 需要置为1
   for (i = i + 1; i < 16; i++) {
-    PUT(ptr+i, 1, char);
+    PUT(ptr+i, (char)0xff, char);
   }
 }
 
@@ -88,11 +84,15 @@ static void *find_match_space(char *list, size_t size) {
       return NULL;
     else
       off = find_lowest_zero_bit(free_bitmap_extend, 64);
-    free_bitmap_extend |= (1 << off);
+    if (off < 0)
+      return NULL;
+    free_bitmap_extend |= (1ULL << off);
     off += 64;
   } else {
     off = find_lowest_zero_bit(free_bitmap, 64);
-    free_bitmap |= (1 << off);
+    if (off < 0)
+      return NULL;
+    free_bitmap |= (1ULL << off);
   }
 
   PUT(HDRP(list), free_bitmap_extend, uint64_t);
@@ -150,7 +150,9 @@ void *kalloc(size_t size, mode_t mode) {
 
 void kfree(void *addr, mode_t mode) {
   if (addr == NULL) {
+    #ifdef CONFIG_DEBUG
     log("warning: Trying to free a null pointer\n");
+    #endif
     return;
   }
   char *list;
@@ -179,14 +181,14 @@ void kfree(void *addr, mode_t mode) {
   // 对于 slab cache 的内存块实际释放的操作
 do_free:
   memset(addr, 0xc, size);
-  struct blockret ret = get_block_index_helper(addr, list, mode);
+  struct blockret ret = get_block_index_helper(addr, list, size);
   if (ret.off >= 64) {
     uint64_t val = GET(HDRP(ret.list), uint64_t);
-    val &= (~(1 << (ret.off - 64)));
+    val &= (~(1ULL << (ret.off - 64)));
     PUT(HDRP(ret.list), val, uint64_t);
   } else {
     uint64_t val = GET(HDRP(HDRP(ret.list)), uint64_t);
-    val &= (~(1 << ret.off));
+    val &= (~(1ULL << ret.off));
     PUT(HDRP(HDRP(ret.list)), val, uint64_t);
   }
   uint64_t val1 = GET(HDRP(HDRP(ret.list)), uint64_t);

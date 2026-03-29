@@ -16,7 +16,7 @@ int main(int argc, char *argv[]) {
       printf("init: exec sh failed\n");
       exit(1);
     } else {
-      exit(wait(pid));
+      wait(pid);
     }
   }
 }

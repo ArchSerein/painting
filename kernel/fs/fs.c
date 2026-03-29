@@ -13,6 +13,7 @@
 #include <buf.h>
 #include <pm.h>
 #include <dirent.h>
+#include <defs.h>
 
 #define   MAX_FS_NUM    10
 #define   FATDIR_PERM(entry) (*(char *)entry + SHORT_NAME_LEN)
@@ -84,7 +85,9 @@ static bool match_dirent_entry(const char *name, struct dirent *parent, struct F
   } else {
     fill_file_name(_name, entry);
   }
+  #ifdef CONFIG_DEBUG
   log("file name: %s\n", _name);
+  #endif
   if (strncmp(_name, name, strlen(name)))
     return false;
 
@@ -96,8 +99,6 @@ static bool match_dirent_entry(const char *name, struct dirent *parent, struct F
   newDir->linkcnt = 1;
   newDir->parent->offset = offset;
   newDir->type = newDir->mode & ATTR_DIRECTORY ? DIR_DIR : DIR_FILE;
-
-  list_push_back(&parent->child, &newDir->elem);
   if (newDir->mode & ATTR_DIRECTORY)
     list_init(&newDir->child);
 
@@ -153,7 +154,9 @@ static void find_dirent_entry(struct dirent *dir, const char *name, struct diren
       break;  // 到达文件尾或无效簇
     }
     if (result == 0) {
+      #ifdef CONFIG_DEBUG
       log("find %s\n", name);
+      #endif
       break;
     }
 
@@ -269,7 +272,9 @@ bool createItemAt(struct dirent *base_dir, const char *path, struct dirent **fil
   char cpath[strlen(path)+1];
   strncpy(cpath, path, strlen(path));
   if ((r = walkDir(fs, cpath, base_dir, &dir, &f, lastElem, &longSet)) == 0) {
+    #ifdef CONFIG_DEBUG
     log("file already exist\n");
+    #endif
     return false;
   }
   panic("createItemAt todo");
@@ -418,5 +423,7 @@ void fat32Test() {
 	// 读出文件
 	ASSERT(fileread(file, (uint64_t)buf, 0, file->size) >= 0);
   ASSERT(strncmp(buf, str, strlen(str)) == 0);
+	#ifdef CONFIG_DEBUG
 	log("FAT32 Test Passed!\n");
+	#endif
 }

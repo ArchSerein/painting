@@ -19,7 +19,10 @@ void *mem_sbrk(int incr)  {
 	  printf("ERROR: mem_sbrk failed. Ran out of memory...\n");
 	  return (void *)-1;
   }
-  mem_heap_end = sbrk(incr);
+  void *ret = sbrk(incr);
+  if (ret == (void *)-1)
+    return (void *)-1;
+  mem_heap_end += incr;
   return (void *)old_brk;
 }
 
@@ -180,4 +183,3 @@ void *realloc(void *ptr, uint32_t size) {
   free(oldptr);
   return newptr;
 }
-

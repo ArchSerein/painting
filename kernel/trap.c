@@ -74,7 +74,9 @@ void kerneltrap(void) {
   int which_dev = 0;
   which_dev = dev_intr();
   if (which_dev == 0) {
+    #ifdef CONFIG_DEBUG
     log("on cpu %d, unknown source: scause: %08x, sepc: %08x, stval: %08x\n", r_tp(), r_scause(), r_sepc(), r_stval());
+    #endif
     panic("kerneltrap");
   }
 
@@ -99,6 +101,7 @@ void
 usertrap(void)
 {
   int which_dev = 0;
+  struct proc *p = cur_proc();
 
   if((r_sstatus() & SSTATUS_SPP) != 0)
     panic("usertrap: not from user mode");
@@ -107,8 +110,6 @@ usertrap(void)
   // since we're now in the kernel.
   w_stvec((uint64_t)kernelvec);
 
-  struct proc *p = cur_proc();
-  
   // save user program counter.
   p->trapframe->epc = r_sepc();
   
@@ -166,6 +167,10 @@ void usertrapret(void) {
   w_sstatus(x);
 
   w_sepc(p->trapframe->epc);
+  #ifdef CONFIG_DEBUG
+  log("usertrapret pid=%d epc=0x%p sp=0x%p satp=0x%p\n",
+      p->pid, p->trapframe->epc, p->trapframe->sp, p->pagetable);
+  #endif
 
   uint64_t satp = MAKE_SATP(p->pagetable);
 

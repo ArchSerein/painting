@@ -68,13 +68,21 @@ void syscall(void) {
   struct proc *p = cur_proc();
 
   num = p->trapframe->a7;
+  #ifdef CONFIG_DEBUG
+  log("syscall enter pid=%d num=%d epc=0x%p\n", p->pid, num, p->trapframe->epc);
+  #endif
   bool is_valid_syscall = num > 0 && num < array_size(syscalls) && syscalls[num];
   if (is_valid_syscall) {
     // Use num to lookup the system call function for num, call it,
     // and store its return value in p->trapframe->a0
     p->trapframe->a0 = syscalls[num]();
+    #ifdef CONFIG_DEBUG
+    log("syscall done pid=%d num=%d ret=0x%p\n", p->pid, num, p->trapframe->a0);
+    #endif
   } else {
+    #ifdef CONFIG_DEBUG
     log("%d %s: unknown system call %d\n", p->pid, p->name, num);
+    #endif
     p->trapframe->a0 = -1;
   }
 }

@@ -243,7 +243,11 @@ virtio_disk_rw(struct buf *b, int write)
 void
 virtio_disk_intr()
 {
+#ifdef CONFIG_DEBUG
+  #ifdef CONFIG_DEBUG
   // log("entry virtio_disk_intr\n");
+  #endif
+#endif
 
   // the device won't raise another interrupt until we tell it
   // we've seen this interrupt, which the following line does.
@@ -263,7 +267,9 @@ virtio_disk_intr()
     int id = disk.used->ring[disk.used_idx % NUM].id;
 
     if(disk.info[id].status != 0) {
+      #ifdef CONFIG_DEBUG
       log("disk id: %d, status: %d\n", id, disk.info[id].status);
+      #endif
       panic("virtio_disk_intr status");
     }
 
@@ -276,7 +282,9 @@ virtio_disk_intr()
 }
 
 void virtioTest() {
+	#ifdef CONFIG_DEBUG
 	log("begin virtio test!\n");
+	#endif
 	struct buf bufR, bufW;
 
 	// 测试写入0号扇区（块）
@@ -304,6 +312,8 @@ void virtioTest() {
 	virtio_disk_rw(&bufR, 0); // read
 	ASSERT(strncmp((const char *)bufR.data, (const char *)bufW.data, BSIZE) == 0);
 
+	#ifdef CONFIG_DEBUG
 	log("virtio driver test passed!\n");
+	#endif
 }
 

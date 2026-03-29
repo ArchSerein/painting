@@ -49,6 +49,7 @@ void main(uint64_t hartid, uint64_t _dtbEntry) {
     buddy_init();
     slab_init();
     process_init();
+    rb_init();
     init_fs();
     started = 1;
     __sync_synchronize();

@@ -76,20 +76,27 @@ uint64_t uvmdealloc(pagetable_t pagetable, uint64_t oldsz, uint64_t newsz) {
   return newsz;
 }
 
-// Free user memory pages,
-// then free page-table pages.
-void uvmfree(pagetable_t pagetable, uint64_t sz) {
-  if(sz > 0)
-    uvmunmap(pagetable, 0, PGROUNDUP(sz)/PGSIZE, 1);
-  freewalk(pagetable);
+static void
+uvmfree_recursive(pagetable_t pagetable, int level)
+{
+  for(int i = 0; i < 512; i++){
+    pte_t pte = pagetable[i];
+    if(pte & PTE_V){
+      pagetable[i] = 0;
+      if(level > 0 && (pte & (PTE_R|PTE_W|PTE_X)) == 0){
+        uvmfree_recursive(PTE2PA(pte), level - 1);
+      } else if(pte & PTE_U){
+        kpmfree((void*)PTE2PA(pte));
+      }
+    }
+  }
+  kpmfree((void*)pagetable);
 }
 
-// Given a parent process's page table, copy
-// its memory into a child's page table.
-// Copies both the page table and the
-// physical memory.
-// returns 0 on success, -1 on failure.
-// frees any allocated pages on failure.
+void uvmfree(pagetable_t pagetable, uint64_t sz) {
+  uvmfree_recursive(pagetable, 2);
+}
+
 int uvmcopy(pagetable_t old, pagetable_t new, uint64_t sz) {
   pte_t *pte;
   uint64_t pa, i;
@@ -97,25 +104,21 @@ int uvmcopy(pagetable_t old, pagetable_t new, uint64_t sz) {
   char *mem;
 
   for(i = 0; i < sz; i += PGSIZE){
-    if((pte = walk(old, i, 0)) == 0)
-      panic("uvmcopy: pte should exist");
-    if((*pte & PTE_V) == 0)
-      panic("uvmcopy: page not present");
+    pte = walk(old, i, 0);
+    if(pte == 0 || (*pte & PTE_V) == 0 || (*pte & PTE_U) == 0)
+      continue;
+
     pa = (uint64_t)PTE2PA(*pte);
     flags = PTE_FLAGS(*pte);
     if((mem = kpmalloc()) == 0)
-      goto err;
+      return -1;
     memmove(mem, (char*)pa, PGSIZE);
-    if(mappages(new, i, (uint64_t)mem, PGSIZE, flags) != 0){
+    if(mappages(new, i, (uint64_t)mem, PGSIZE, flags & (PTE_R|PTE_W|PTE_X|PTE_U)) != 0){
       kpmfree(mem);
-      goto err;
+      return -1;
     }
   }
   return 0;
-
- err:
-  uvmunmap(new, 0, i / PGSIZE, 1);
-  return -1;
 }
 
 // mark a PTE invalid for user access.

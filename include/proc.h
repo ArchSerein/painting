@@ -90,6 +90,8 @@ struct proc {
   struct list         child_list;
   struct list         file_list;
   struct list_elem    elem;
+  struct list_elem    sched_elem;
+  bool                in_run_queue;
   int                 priority;
   struct proc *       parent;
   uint64_t            vruntime;

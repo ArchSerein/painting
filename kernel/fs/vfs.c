@@ -12,6 +12,7 @@
 #include <string.h>
 #include <fs.h>
 #include <vfs.h>
+#include <console.h>
 
 static struct file *find_file(struct list *list, int fd) {
   struct list_elem *e;
@@ -29,25 +30,48 @@ bool filesys_create(struct proc *p, char *path, mode_t mode) {
   ASSERT_INFO(file != NULL, "alloc dirent fault");
   if (!file_create(base, path, mode, file)) {
     dirent_free(file);
+    #ifdef CONFIG_DEBUG
     log("create file %s fault\n", path);
+    #endif
     return false;
   }
   return true;
 }
 
 int filesys_open(struct proc *p, char *path, int flags) {
-  struct dirent *base = p->cwd != NULL ? p->cwd->dirent : NULL;
-  struct dirent *dirent = file_open(base, path, flags);
-  if (dirent == NULL) {
-    return -1;
+  struct dirent *dirent = NULL;
+  enum file_type type = FD_FILE;
+  #ifdef CONFIG_DEBUG
+  log("filesys_open enter pid=%d path=%s\n", p ? p->pid : -1, path);
+  #endif
+
+  if (strncmp(path, "console", 7) == 0) {
+    type = FD_DEVICE;
+  } else {
+    struct dirent *base = p->cwd != NULL ? p->cwd->dirent : NULL;
+    #ifdef CONFIG_DEBUG
+    log("filesys_open before file_open pid=%d path=%s\n", p ? p->pid : -1, path);
+    #endif
+    dirent = file_open(base, path, flags);
+    #ifdef CONFIG_DEBUG
+    log("filesys_open after file_open pid=%d path=%s dirent=%p\n", p ? p->pid : -1, path, dirent);
+    #endif
+    if (dirent == NULL) {
+      return -1;
+    }
   }
+
   struct file *file = kalloc(sizeof(struct file), FILE_MODE);
   file->flag = flags;
   file->dirent = dirent;
   file->fd = alloc_fd();
   file->pos = 0;
   file->deny_write = false;
+  file->type = type;
   list_push_back(&p->file_list, &file->elem);
+  #ifdef CONFIG_DEBUG
+  log("filesys_open return pid=%d path=%s fd=%d\n", p ? p->pid : -1, path, file->fd);
+  #endif
   return file->fd;
 }
 
@@ -55,6 +79,9 @@ off_t filesys_write(struct proc *p, int fd, char *addr, size_t size) {
   struct file *file = find_file(&p->file_list, fd);
   if (file == NULL)
     return -1;
+  if (file->type == FD_DEVICE) {
+    return console_write(0, (uint64_t)addr, size);
+  }
   size = file_write(file->dirent, addr, file->pos, size);
   file->pos += size;
   return size;
@@ -64,6 +91,9 @@ off_t filesys_read(struct proc *p, int fd, char *buf, size_t size) {
   struct file *file = find_file(&p->file_list, fd);
   if (file == NULL)
     return -1;
+  if (file->type == FD_DEVICE) {
+    return console_read(0, (uint64_t)buf, size);
+  }
   size = file_read(file->dirent, buf, file->pos, size);
   file->pos += size;
   return size;
@@ -75,6 +105,7 @@ bool filesys_close(struct proc *p, int fd) {
     return true;
   else {
     struct dirent *dirent = file->dirent;
+    free_fd(file->fd);
     list_remove(&file->elem);
     kfree(file, FILE_MODE);
     return file_close(dirent);
@@ -92,11 +123,16 @@ bool filesys_remove(struct proc *p, char *filename) {
   bool ret = false;
   if (file != NULL) {
     struct dirent *dirent = file->dirent;
+    free_fd(file->fd);
     list_remove(&file->elem);
     kfree(file, FILE_MODE);
     ret = file_remove(dirent, filename);
     if (!file_close(dirent))
+      {
+      #ifdef CONFIG_DEBUG
       log("Failure to close file before removing it\n");
+      #endif
+      }
   }
   return ret;
 }
@@ -114,7 +150,9 @@ void filesys_seek(struct proc *p, int fd, off_t offset, int mode) {
       file->pos = file->dirent->size;
       break;
     default:
+      #ifdef CONFIG_DEBUG
       log("invalid mode\n");
+      #endif
       ASSERT(0);
   }
 }

@@ -53,12 +53,16 @@ static int clusinit(struct filesystem *fs) {
  * @brief 计数文件的簇数
  */
 static int count_clusters(struct dirent *file) {
+	#ifdef CONFIG_DEBUG
 	log("count Cluster begin!\n");
+	#endif
 
 	int clus = file->first_cluster;
 	int i = 0;
 	if (clus == 0) {
+		#ifdef CONFIG_DEBUG
 		log("cluster is 0!\n");
+		#endif
 		return 0;
 	}
 	// 如果文件不包含任何块，则直接返回0即可。
@@ -67,17 +71,23 @@ static int count_clusters(struct dirent *file) {
 			clus = fatread(file->filesystem, clus);
 			i += 1;
 		}
+		#ifdef CONFIG_DEBUG
 		log("count Cluster end!\n");
+		#endif
 		return i;
 	}
 }
 
 void fat32_init(struct filesystem *fs) {
+  #ifdef CONFIG_DEBUG
   log("init fat32 ...\n");
+  #endif
   strncpy(fs->name, "FAT32", 5);
 
   ASSERT_INFO(clusinit(fs) == 0, "clusinit fault");
+  #ifdef CONFIG_DEBUG
   log("clus init finish\n");
+  #endif
 
   fs->root = dirent_alloc();
   fs->root->first_cluster = fs->superblock.cluster_root_directory;
@@ -91,7 +101,9 @@ void fat32_init(struct filesystem *fs) {
   list_init(&fs->root->child);
   ASSERT_INFO(sizeof(struct FAT32Directory) == DIRENT_SIZE, "FAT32Directory size is not DIRENT_SIZE");
 
+  #ifdef CONFIG_DEBUG
   log("fat32 fs init finish\n");
+  #endif
 }
 
 uint32_t fatread(struct filesystem *fs, uint32_t clusterNo) {
@@ -155,7 +167,9 @@ uint32_t clusalloc(struct filesystem *fs, uint32_t prevNo) {
   }
 
   // 如果没有找到空闲簇
+  #ifdef CONFIG_DEBUG
   log("out of data cluster space");
+  #endif
   return 0;
 }
 

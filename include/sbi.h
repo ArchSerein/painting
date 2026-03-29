@@ -80,25 +80,19 @@ static inline void sbi_shutdown(void) {
 }
 
 static inline long sbi_console_putchar(int ch) {
-  struct sbiret sbiret;
-  sbiret = SBI_CALL_1(SBI_EXT_0_1_CONSOLE_PUTCHAR, SBI_EXT_DBCN_CONSOLE_WRITE, ch);
-
-  if (sbiret.error == SBI_SUCCESS)
-    return sbiret.value;
-  else sbi_error_handler(sbiret.error);
-
-  return -1;
+  // Legacy SBI v0.1 console putchar: a7=extension, a0=character.
+  register uintptr_t a0 asm("a0") = (uintptr_t)ch;
+  register uintptr_t a7 asm("a7") = (uintptr_t)SBI_EXT_0_1_CONSOLE_PUTCHAR;
+  asm volatile("ecall" : "+r"(a0) : "r"(a7) : "memory");
+  return (long)a0;
 }
 
 static inline long sbi_console_getchar(void) {
-  struct sbiret sbiret;
-  sbiret = SBI_CALL_0(SBI_EXT_0_1_CONSOLE_GETCHAR, SBI_EXT_DBCN_CONSOLE_READ);
-
-  if (sbiret.error == SBI_SUCCESS)
-    return sbiret.value;
-  else sbi_error_handler(sbiret.error);
-
-  return -1;
+  // Legacy SBI v0.1 console getchar: returns char or -1 in a0.
+  register uintptr_t a0 asm("a0");
+  register uintptr_t a7 asm("a7") = (uintptr_t)SBI_EXT_0_1_CONSOLE_GETCHAR;
+  asm volatile("ecall" : "=r"(a0) : "r"(a7) : "memory");
+  return (long)a0;
 }
 
 static inline struct sbiret sbi_hart_start(unsigned long hartid,

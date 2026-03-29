@@ -37,7 +37,9 @@ void acquire(struct spinlock *lk) {
 
 void release(struct spinlock *lk) {
   if(!holding(lk)) {
+    #ifdef CONFIG_DEBUG
     log("cur_proc: %p, lock: %s\n", cur_proc(), lk->name);
+    #endif
     panic("release");
   }
 

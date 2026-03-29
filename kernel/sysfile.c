@@ -12,25 +12,33 @@
 
 static bool valid_user_arg(uint64_t addr) {
   struct proc *p = cur_proc();
+  if (p == NULL || p->pagetable == 0) {
+    #ifdef CONFIG_DEBUG
+    log("valid_user_arg: bad proc/pagetable p=%p pagetable=%p addr=0x%p\n",
+        p, p ? p->pagetable : 0, addr);
+    #endif
+    return false;
+  }
   if (walk(p->pagetable, addr, 0) == NULL)
     return false;
   else
     return true;
 }
 
-static void transtr(uint64_t addr, char *buf, uint64_t size, bool direction) {
-  // The implementation of checking the legitimacy of an addr is in the valid_user_arg
-  if (direction) {
-    if (copyin(cur_proc()->pagetable, buf, addr, size) < 0) {
-      log("copy data from user to kernel fault\n");
-      process_exit(-1);
+static int transstr(uint64_t uaddr, char *buf, uint64_t maxlen) {
+  struct proc *p = cur_proc();
+  for (uint64_t i = 0; i < maxlen; i++) {
+    if (copyin(p->pagetable, &buf[i], uaddr + i, 1) < 0) {
+      #ifdef CONFIG_DEBUG
+      log("copy string from user to kernel fault\n");
+      #endif
+      return -1;
     }
-  } else {
-    if (copyout(cur_proc()->pagetable, addr, buf, size) < 0) {
-      log("copy data from user to kernel fault\n");
-      process_exit(-1);
-    }
+    if (buf[i] == '\0')
+      return 0;
   }
+  buf[maxlen - 1] = '\0';
+  return 0;
 }
 
 uint64_t sys_create(void) {
@@ -39,12 +47,15 @@ uint64_t sys_create(void) {
   argint(&mode, 1);
 
   if (!valid_user_arg(path)) {
+    #ifdef CONFIG_DEBUG
     log("invalid user arg addr: 0x%08x\n", path);
+    #endif
     return -1;
   }
 
   char filename[MAX_FILE_NAME_LEN];
-  transtr(path, filename, MAX_FILE_NAME_LEN, true);
+  if (transstr(path, filename, MAX_FILE_NAME_LEN) < 0)
+    return -1;
   if (filesys_create(cur_proc(), filename, mode))
     return -1;
   else
@@ -57,11 +68,14 @@ uint64_t sys_open(void) {
   argint(&flags, 1);
 
   if (!valid_user_arg(path)) {
+    #ifdef CONFIG_DEBUG
     log("invalid user arg addr: 0x%08x\n", path);
+    #endif
     return -1;
   } else {
     char filename[MAX_FILE_NAME_LEN];
-    transtr(path, filename, MAX_FILE_NAME_LEN, true);
+    if (transstr(path, filename, MAX_FILE_NAME_LEN) < 0)
+      return -1;
     return filesys_open(cur_proc(), filename, flags);
   }
 }
@@ -73,21 +87,39 @@ uint64_t sys_write(void) {
   argint(&fd, 0);
   argaddr(&addr, 1);
   argint(&size, 2);
-
   if (!valid_user_arg(addr)) {
+    #ifdef CONFIG_DEBUG
     log("invalid user arg addr: 0x%08x\n", addr);
+    #endif
     return -1;
   } else {
-    char buf[size+1];
-    transtr(addr, buf, size, true);
-    if (fd == STDOUT || fd == STDERR) {
-      buf[size] = '\0';
-      printf("%s", buf);
-    } else {
-      size = filesys_write(cur_proc(), fd, buf, size);
+    const uint64_t buflen = 1024;
+    char *buf = kalloc(buflen, DEFAULT);
+    if (buf == NULL)
+      return -1;
+    uint64_t total = 0;
+    while (total < size) {
+      uint64_t n = size - total;
+      if (n > buflen - 1) n = buflen - 1;
+      if (copyin(cur_proc()->pagetable, buf, addr + total, n) < 0) {
+        kfree(buf, DEFAULT);
+        return -1;
+      }
+      
+      if (fd == STDOUT || fd == STDERR) {
+        buf[n] = '\0';
+        printf("%s", buf);
+      } else {
+        if (filesys_write(cur_proc(), fd, buf, n) != n) {
+          kfree(buf, DEFAULT);
+          return -1;
+        }
+      }
+      total += n;
     }
+    kfree(buf, DEFAULT);
+    return total;
   }
-  return size;
 }
 
 uint64_t sys_read(void) {
@@ -97,16 +129,38 @@ uint64_t sys_read(void) {
   argint(&fd, 0);
   argaddr(&addr, 1);
   argint(&size, 2);
+  #ifdef CONFIG_DEBUG
+  struct proc *p = cur_proc();
+  log("sys_read pid=%d fd=%d addr=0x%p size=%d pagetable=%p\n",
+      p ? p->pid : -1, fd, addr, size, p ? p->pagetable : 0);
+  #endif
 
   if (!valid_user_arg(addr)) {
+    #ifdef CONFIG_DEBUG
     log("invalid user arg addr: 0x%08x\n", addr);
+    #endif
     return -1;
   } else {
-    char buf[size+1];
-    size = filesys_read(cur_proc(), fd, buf, size);
-    transtr(addr, buf, size, false);
+    const uint64_t buflen = 1024;
+    char *buf = kalloc(buflen, DEFAULT);
+    if (buf == NULL)
+      return -1;
+    uint64_t total = 0;
+    while (total < size) {
+      uint64_t n = size - total;
+      if (n > buflen) n = buflen;
+      uint64_t nread = filesys_read(cur_proc(), fd, buf, n);
+      if (nread <= 0) break;
+      if (copyout(cur_proc()->pagetable, addr + total, buf, nread) < 0) {
+        kfree(buf, DEFAULT);
+        return -1;
+      }
+      total += nread;
+      if (nread < n) break; // EOF or less than requested
+    }
+    kfree(buf, DEFAULT);
+    return total;
   }
-  return size;
 }
 
 uint64_t sys_close(void) {
@@ -124,7 +178,9 @@ uint64_t sys_close(void) {
 //   argaddr(&path, 0);
 //
 //   if (!valid_user_arg(path)) {
+#ifdef CONFIG_DEBUG
 //     log("invalid user arg addr: 0x%08x\n", addr);
+#endif
 //     return -1;
 //   } else {
 //     struct proc *p = cur_proc();

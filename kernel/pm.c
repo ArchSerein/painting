@@ -38,7 +38,9 @@ freerange(void *pa_start, void *pa_end) {
   for(; p + PGSIZE <= (char*)pa_end; p += PGSIZE) {
     kpmfree(p);
     // ++pg_num;
+    #ifdef CONFIG_DEBUG
     // log("pg_num: %d\n", pg_num);
+    #endif
   }
 }
 

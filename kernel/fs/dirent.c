@@ -4,6 +4,7 @@
 #include <fat32.h>
 #include <fatfs.h>
 #include <dirent.h>
+#include <string.h>
 
 static struct dirent dirent_poll[MAX_DIRENT];
 static struct list   dirent_list;
@@ -16,10 +17,13 @@ void dirent_init(void) {
 }
 
 struct dirent *dirent_alloc() {
-  if (!list_empty(&dirent_list))
-    return list_entry(list_pop_front(&dirent_list), struct dirent, elem);
-  else
+  if (!list_empty(&dirent_list)) {
+    struct dirent *dir = list_entry(list_pop_front(&dirent_list), struct dirent, elem);
+    memset(dir, 0, sizeof(*dir));
+    return dir;
+  } else {
     return NULL;
+  }
 }
 
 void dirent_free(struct dirent *dir) {

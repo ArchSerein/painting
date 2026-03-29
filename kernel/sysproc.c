@@ -11,19 +11,39 @@
 #include <syscall.h>
 #include <string.h>
 
-static void transtr(uint64_t addr, char *buf, uint64_t size, bool direction) {
-  // The implementation of checking the legitimacy of an addr is in the valid_user_arg
+static int transtr(uint64_t addr, char *buf, uint64_t size, bool direction) {
   if (direction) {
     if (copyin(cur_proc()->pagetable, buf, addr, size) < 0) {
+      #ifdef CONFIG_DEBUG
       log("copy data from user to kernel fault\n");
-      process_exit(-1);
+      #endif
+      return -1;
     }
   } else {
     if (copyout(cur_proc()->pagetable, addr, buf, size) < 0) {
-      log("copy data from user to kernel fault\n");
-      process_exit(-1);
+      #ifdef CONFIG_DEBUG
+      log("copy data from kernel to user fault\n");
+      #endif
+      return -1;
     }
   }
+  return 0;
+}
+
+static int transstr(uint64_t uaddr, char *buf, uint64_t maxlen) {
+  struct proc *p = cur_proc();
+  for (uint64_t i = 0; i < maxlen; i++) {
+    if (copyin(p->pagetable, &buf[i], uaddr + i, 1) < 0) {
+      #ifdef CONFIG_DEBUG
+      log("copy string from user to kernel fault\n");
+      #endif
+      return -1;
+    }
+    if (buf[i] == '\0')
+      return 0;
+  }
+  buf[maxlen - 1] = '\0';
+  return 0;
 }
 
 uint64_t sys_getpid(void) {
@@ -35,24 +55,46 @@ uint64_t sys_exec(void) {
   uint64_t uaddr;
   argaddr(&ufile, 0);
   argaddr(&uargv, 1);
+  #ifdef CONFIG_DEBUG
+  log("sys_exec pid=%d ufile=0x%p uargv=0x%p\n", cur_proc()->pid, ufile, uargv);
+  #endif
 
   char path[MAXLEN];
-  static char argv[MAXARG][MAXLEN];
+  char (*argbuf)[MAXLEN] = kalloc(MAXARG * MAXLEN, DEFAULT);
+  const char *argv[MAXARG];
+  memset(argv, 0, sizeof(argv));
+  if (argbuf == NULL)
+    return -1;
 
-  transtr(ufile, path, MAXLEN, true);
-  for (int i = 0; i < MAXARG; i++) {
-    transtr(uargv + sizeof (uint64_t) * i, (char *)&uaddr, sizeof(uint64_t), true);
-    if (uaddr == 0) {
-      memset(argv[i], 0, MAXLEN);
-      break;
-    }
-    transtr(uaddr, argv[i], MAXLEN, true);
+  if (transstr(ufile, path, MAXLEN) < 0) {
+    #ifdef CONFIG_DEBUG
+    log("sys_exec path copy fail pid=%d ufile=0x%p\n", cur_proc()->pid, ufile);
+    #endif
+    kfree(argbuf, DEFAULT);
+    return -1;
   }
 
-  if (process_execute(path, (const char **)argv))
+  for (int i = 0; i < MAXARG; i++) {
+    if (transtr(uargv + sizeof (uint64_t) * i, (char *)&uaddr, sizeof(uint64_t), true) < 0) {
+      kfree(argbuf, DEFAULT);
+      return -1;
+    }
+    if (uaddr == 0) {
+      argv[i] = NULL;
+      break;
+    }
+    if (transstr(uaddr, argbuf[i], MAXLEN) < 0) {
+      kfree(argbuf, DEFAULT);
+      return -1;
+    }
+    argv[i] = argbuf[i];
+  }
+
+  bool ok = process_execute(path, argv);
+  kfree(argbuf, DEFAULT);
+  if (ok)
     return 0;
-  else
-    return -1;
+  return -1;
 }
 
 uint64_t sys_exit(void) {
