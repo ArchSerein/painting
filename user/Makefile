@@ -24,7 +24,8 @@ $(shell mkdir -p $(TAR))
 
 UPROGS = \
 						$(TAR)/init	\
-						$(TAR)/sh
+						$(TAR)/sh	\
+						$(TAR)/echo
 
 ULIB = $(TAR)/lib.o \
 			 $(TAR)/entry.o	\
